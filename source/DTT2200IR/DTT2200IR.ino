@@ -129,7 +129,7 @@ void timeOut() {
 
 void timerUpdate() {
   if (timerMillis > millis() / 1000) {
-    timerMilis = 0;
+    timerMillis = 0;
     timeOut();
   }
 }
