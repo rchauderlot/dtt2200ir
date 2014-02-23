@@ -25,9 +25,9 @@ int TEST_PIN            = 13;
 int DEBOUNCE_DELAY       = 20;
 // LCD conf
 int digit_num = 4;
-char muteMessage[]  = "MUTE";
+char muteMessage[]  = " off";
 char clearMessage[] = "    ";
-unsigned long long messageDuration = 3*60;
+unsigned long messageDuration = 3000;
 
 // IR Code Table
 unsigned long VOL_UP_CODE   = 0x68733A46;
@@ -38,11 +38,17 @@ unsigned long IR_CODES[]    = {VOL_UP_CODE, VOL_DOWN_CODE, MUTE_CODE, 0};
 
 
 // Internal status
-int volume = 0;
-boolean mute = 0;
+int     volume = 0;
+int     volume_min = 1;
+int     volume_max = 100;
+boolean mute   = true;
 decode_results results;
 decode_results last_results;
 unsigned long timerMillis;
+int     lastMemVolume = 0;
+boolean lastMemMute   = 0;
+unsigned long memTimerMillis;
+unsigned long memDebounceDuration = 10000;
 
 // Devices
 IRrecv irrecv(IR_RECV_PIN);
@@ -71,6 +77,9 @@ void setup()
 
   Serial.begin(9600);
   irrecv.enableIRIn(); // Start the receiver
+  
+  Serial.println("DTT2200IR");
+  sendProgressToLCD();
 }
 
 
@@ -78,24 +87,36 @@ void setup()
  * Actions
  */
 void upDetected () {
-  if (mute) {
+  if (mute && volume >= volume_min) {
     mute = false;
   } else {
-    volume ++;
+    if (volume < volume_max) {
+      volume ++;
+      mute = false;
+    }
   }
   sendProgressToLCD();
 }
 
 void downDetected () {
-  if (mute) {
+  if (mute && volume >= volume_min) {
     mute = false;
   } else {
-    volume --;
+    if (volume > volume_min) {
+      volume --;
+    } else {
+      volume = volume_min - 1;
+      mute = true;
+    }
   }
+  sendProgressToLCD();
 }
 
 void muteDetected () {
-  mute != mute;
+  mute = !mute;
+  if (volume < volume_min) {
+    volume = volume_min;
+  }
   sendProgressToLCD();
 }
 
@@ -104,9 +125,11 @@ void muteDetected () {
  */
 void sendProgressToLCD() {
   if (mute) {
-    lcd.sendCharString(muteMessage);
+    Serial.println("mute");
+    lcd.sendCharString(muteMessage, true);
   } else {
-    lcd.sendDigit(volume, digit_num);
+    Serial.println(volume);
+    lcd.sendDigit(volume, digit_num, true);
     timerStart();
   }
 }
@@ -128,7 +151,7 @@ void timeOut() {
 }
 
 void timerUpdate() {
-  if (timerMillis > millis() / 1000) {
+  if (millis() > timerMillis && timerMillis > 0) {
     timerMillis = 0;
     timeOut();
   }
@@ -138,14 +161,17 @@ void timerUpdate() {
  * Buttons functions
  */
 void volUpButtonPressed() {
+  Serial.println("up pressed");
   upDetected();
 }
 
 void volDownButtonPressed() {
+  Serial.println("down pressed");
   downDetected();
 }
 
 void muteButtonPressed() {
+  Serial.println("mute pressed");
   muteDetected();
 }
 
