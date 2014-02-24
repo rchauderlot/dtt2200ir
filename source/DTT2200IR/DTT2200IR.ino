@@ -1,6 +1,9 @@
 #include <IRremote.h>
 #include <lcd.h>
 #include <button.h>
+#include <EEPROM.h>
+
+//#define __DEBUG__
 
 // PINTOUT ASSIGNMENT
 // TO MAIN BOARD
@@ -37,18 +40,20 @@ unsigned long POWER_CODE    = 0xF4BA2988;
 unsigned long IR_CODES[]    = {VOL_UP_CODE, VOL_DOWN_CODE, MUTE_CODE, 0};
 
 
-// Internal status
-int     volume = 0;
 int     volume_min = 1;
 int     volume_max = 100;
+long    volumeMemAddress = 10;
+long    muteMemAddress   = 11;
+
+// Internal status
+int     volume = 0;
+
 boolean mute   = true;
 decode_results results;
 decode_results last_results;
 unsigned long timerMillis;
 int     lastMemVolume = 0;
 boolean lastMemMute   = 0;
-unsigned long memTimerMillis;
-unsigned long memDebounceDuration = 10000;
 
 // Devices
 IRrecv irrecv(IR_RECV_PIN);
@@ -75,10 +80,12 @@ void setup()
     pinMode(TEST_PIN           , OUTPUT);
   }
 
-  Serial.begin(9600);
   irrecv.enableIRIn(); // Start the receiver
-  
+#ifdef __DEBUG__  
+  Serial.begin(9600);
   Serial.println("DTT2200IR");
+#endif
+  restoreStatus();
   sendProgressToLCD();
 }
 
@@ -125,13 +132,17 @@ void muteDetected () {
  */
 void sendProgressToLCD() {
   if (mute) {
+#ifdef __DEBUG__
     Serial.println("mute");
+#endif
     lcd.sendCharString(muteMessage, true);
   } else {
+#ifdef __DEBUG__
     Serial.println(volume);
+#endif
     lcd.sendDigit(volume, digit_num, true);
-    timerStart();
   }
+  timerStart();
 }
 
 void clearLCD () {
@@ -147,7 +158,10 @@ void timerStart() {
 }
 
 void timeOut() {
-  clearLCD();
+  if (!mute) {
+    clearLCD();
+  }
+  saveStatus();
 }
 
 void timerUpdate() {
@@ -161,20 +175,60 @@ void timerUpdate() {
  * Buttons functions
  */
 void volUpButtonPressed() {
+#ifdef __DEBUG__
   Serial.println("up pressed");
+#endif
   upDetected();
 }
 
 void volDownButtonPressed() {
+#ifdef __DEBUG__
   Serial.println("down pressed");
+#endif
   downDetected();
 }
 
 void muteButtonPressed() {
+#ifdef __DEBUG__
   Serial.println("mute pressed");
+#endif
   muteDetected();
 }
 
+/**
+ * Persistence functions
+ */
+void saveStatus () {
+  if (volume != lastMemVolume || mute != lastMemMute) {
+#ifdef __DEBUG__  
+  Serial.println("Saving new status");
+#endif
+    EEPROM.write(volumeMemAddress, volume);
+    EEPROM.write(muteMemAddress, mute);
+    lastMemVolume = volume;
+    lastMemMute = mute;    
+  }
+}
+
+void restoreStatus () {
+    int storedVolume = EEPROM.read(volumeMemAddress);
+    int storedMute = EEPROM.read(muteMemAddress);
+    if (storedVolume > volume_max || storedVolume < volume_min - 1 || storedMute > 1 || storedMute < 0 ) {
+#ifdef __DEBUG__  
+      Serial.println("Status not restored properly defaulting to muted");
+#endif
+      volume = 0;
+      mute = 1;
+    } else {
+#ifdef __DEBUG__  
+      Serial.println("Status restored");
+#endif
+      volume = storedVolume;
+      mute = storedMute;
+    }
+    lastMemVolume = volume;
+    lastMemMute = mute;    
+}
 
 /**
  * Main loop
@@ -186,8 +240,10 @@ void loop() {
   muteButton.update();
   if (irrecv.decode(&results)) {
     if (last_results.decode_type == results.decode_type && last_results.value == results.value) {
-      Serial.println(results.value, HEX);
 
+#ifdef __DEBUG__  
+      Serial.println(results.value, HEX);
+#endif
       if (last_results.value == VOL_UP_CODE) { // UP DETECTED
         digitalWrite(TEST_PIN, HIGH);
         upDetected();
