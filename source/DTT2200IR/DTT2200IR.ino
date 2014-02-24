@@ -31,6 +31,7 @@ int digit_num = 4;
 char muteMessage[]  = " off";
 char clearMessage[] = "    ";
 unsigned long messageDuration = 3000;
+unsigned long ledDuration = 100;
 
 // IR Code Table
 unsigned long VOL_UP_CODE   = 0x68733A46;
@@ -47,13 +48,16 @@ long    muteMemAddress   = 11;
 
 // Internal status
 int     volume = 0;
-
 boolean mute   = true;
 decode_results results;
 decode_results last_results;
 unsigned long timerMillis;
+unsigned long ledTimerMillis;
 int     lastMemVolume = 0;
 boolean lastMemMute   = 0;
+int     lastRheostateVolume = 0;
+
+
 
 // Devices
 IRrecv irrecv(IR_RECV_PIN);
@@ -64,29 +68,19 @@ Button muteButton(MUTE_BUTTON, muteButtonPressed, DEBOUNCE_DELAY);
 
 void setup()
 {
-  if (VOLUMEN_UP_DOWN >= 0) {
-    pinMode(VOLUMEN_UP_DOWN    , OUTPUT);   
-  }
-  if (VOLUMEN_INCREMENT >= 0) {
-    pinMode(VOLUMEN_INCREMENT  , OUTPUT);   
-  }
-  if (VOLUMEN_CHIP_SELECT >= 0) {
-    pinMode(VOLUMEN_CHIP_SELECT, OUTPUT);
-  }
-  if (POWER_SWITCH_PIN >= 0) {
-    pinMode(POWER_SWITCH_PIN   , OUTPUT);
-  }
-  if (TEST_PIN >= 0) {
-    pinMode(TEST_PIN           , OUTPUT);
-  }
+//  if (POWER_SWITCH_PIN >= 0) {
+//    pinMode(POWER_SWITCH_PIN   , OUTPUT);
+//  }
 
-  irrecv.enableIRIn(); // Start the receiver
 #ifdef __DEBUG__  
   Serial.begin(9600);
   Serial.println("DTT2200IR");
 #endif
   restoreStatus();
-  sendProgressToLCD();
+  initRheostate();
+  initLED();
+  irrecv.enableIRIn(); // Start the receiver
+  sendStatusToLCD();
 }
 
 
@@ -102,7 +96,7 @@ void upDetected () {
       mute = false;
     }
   }
-  sendProgressToLCD();
+  statusChanged();
 }
 
 void downDetected () {
@@ -116,7 +110,7 @@ void downDetected () {
       mute = true;
     }
   }
-  sendProgressToLCD();
+  statusChanged();
 }
 
 void muteDetected () {
@@ -124,13 +118,21 @@ void muteDetected () {
   if (volume < volume_min) {
     volume = volume_min;
   }
-  sendProgressToLCD();
+  statusChanged();
 }
+
+void statusChanged() {
+  sendStatusToRheostate();
+  sendStatusToLCD();
+  lightLED();
+  timerStart();
+}
+
 
 /**
  * LCD functions
  */
-void sendProgressToLCD() {
+void sendStatusToLCD() {
   if (mute) {
 #ifdef __DEBUG__
     Serial.println("mute");
@@ -142,7 +144,6 @@ void sendProgressToLCD() {
 #endif
     lcd.sendDigit(volume, digit_num, true);
   }
-  timerStart();
 }
 
 void clearLCD () {
@@ -195,6 +196,84 @@ void muteButtonPressed() {
   muteDetected();
 }
 
+
+/**
+ * Digital rheostate functions
+ */
+void initRheostate() {
+    if (VOLUMEN_UP_DOWN >= 0) {
+    pinMode(VOLUMEN_UP_DOWN    , OUTPUT);   
+  }
+  if (VOLUMEN_INCREMENT >= 0) {
+    pinMode(VOLUMEN_INCREMENT  , OUTPUT);   
+  }
+  if (VOLUMEN_CHIP_SELECT >= 0) {
+    pinMode(VOLUMEN_CHIP_SELECT, OUTPUT);
+  }
+  digitalWrite(VOLUMEN_CHIP_SELECT, LOW);
+  for (int i=0; i < 100; i++) {
+      sendDownToRheostate();
+  }
+  lastRheostateVolume = 0;
+  sendStatusToRheostate();
+}
+
+void sendUpToRheostate() {
+  digitalWrite(VOLUMEN_INCREMENT, HIGH);
+  digitalWrite(VOLUMEN_UP_DOWN, HIGH);
+  digitalWrite(VOLUMEN_INCREMENT, LOW);
+}
+
+void sendDownToRheostate() {
+  digitalWrite(VOLUMEN_INCREMENT, HIGH);
+  digitalWrite(VOLUMEN_UP_DOWN, LOW);
+  digitalWrite(VOLUMEN_INCREMENT, LOW);
+}
+
+void sendStatusToRheostate() {
+  int volumeToSend = volume;
+  if (mute) {
+    volumeToSend = 0;
+  }
+  if (lastRheostateVolume > volumeToSend) {
+    int steps = lastRheostateVolume - volumeToSend;
+    for (int i = 0; i < steps; i++) {
+      sendDownToRheostate();
+    }
+  } else if (lastRheostateVolume < volumeToSend) {
+    int steps = volumeToSend - lastRheostateVolume;
+    for (int i = 0; i < steps; i++) {
+      sendUpToRheostate();
+    }
+  }
+  lastRheostateVolume = volumeToSend;
+}
+
+/**
+ * LED functions
+ */
+void initLED () {
+  if (TEST_PIN >= 0) {
+    pinMode(TEST_PIN           , OUTPUT);
+  }
+}
+
+void lightLED () {
+  digitalWrite(TEST_PIN, HIGH);
+  ledTimerMillis = millis() + ledDuration;
+}
+
+void turnOffLED () {
+  digitalWrite(TEST_PIN, LOW);
+}
+
+void updateLED () {
+  if (millis() > ledTimerMillis && ledTimerMillis > 0) {
+    ledTimerMillis = 0;
+    turnOffLED();
+  }
+}
+
 /**
  * Persistence functions
  */
@@ -230,11 +309,14 @@ void restoreStatus () {
     lastMemMute = mute;    
 }
 
+
+
 /**
  * Main loop
  */
 void loop() {
   timerUpdate();
+  updateLED();
   volUpButton.update();
   volDownButton.update();
   muteButton.update();
@@ -245,22 +327,16 @@ void loop() {
       Serial.println(results.value, HEX);
 #endif
       if (last_results.value == VOL_UP_CODE) { // UP DETECTED
-        digitalWrite(TEST_PIN, HIGH);
         upDetected();
       }
       if (last_results.value == VOL_DOWN_CODE) { // DOWN_DETECTED
-        digitalWrite(TEST_PIN, HIGH);
         downDetected();
       }
       if (last_results.value == MUTE_CODE) { // MUTE DETECTED
-        digitalWrite(TEST_PIN, HIGH);
         muteDetected();
       }
 //      if (last_results.value == POWER_CODE) { // POWER_DETECTED
-//        digitalWrite(TEST_PIN, HIGH);
 //      }
-      delay(100);
-      digitalWrite(TEST_PIN, LOW);
     }
     last_results = results;
     irrecv.resume(); // Receive the next value
