@@ -36,7 +36,7 @@ unsigned long ledDuration = 100;
 // IR Code Table
 unsigned long VOL_UP_CODE   = 0x68733A46;
 unsigned long VOL_DOWN_CODE = 0x83B19366;
-unsigned long MUTE_CODE     = 0x6C838E06;
+unsigned long MUTE_CODE     = 0x2340B922;
 unsigned long POWER_CODE    = 0xF4BA2988;
 unsigned long IR_CODES[]    = {VOL_UP_CODE, VOL_DOWN_CODE, MUTE_CODE, 0};
 
