@@ -56,7 +56,9 @@ unsigned long ledTimerMillis;
 int     lastMemVolume = 0;
 boolean lastMemMute   = 0;
 int     lastRheostateVolume = 0;
-
+int     rheostateChipSelect = LOW;
+unsigned long rheostatePulseWidth = 1;
+unsigned long rheostateDelayBetweenPulses = 1;
 
 
 // Devices
@@ -210,9 +212,12 @@ void initRheostate() {
   if (VOLUMEN_CHIP_SELECT >= 0) {
     pinMode(VOLUMEN_CHIP_SELECT, OUTPUT);
   }
-  digitalWrite(VOLUMEN_CHIP_SELECT, LOW);
-  for (int i=0; i < 100; i++) {
-      sendDownToRheostate();
+  digitalWrite(VOLUMEN_CHIP_SELECT, rheostateChipSelect);
+  for (int i=0; i < volume_max; i++) {
+    if (i > 0 && rheostateDelayBetweenPulses > 0) {
+      delay(rheostateDelayBetweenPulses);
+    }  
+    sendDownToRheostate();  
   }
   lastRheostateVolume = 0;
   sendStatusToRheostate();
@@ -221,12 +226,18 @@ void initRheostate() {
 void sendUpToRheostate() {
   digitalWrite(VOLUMEN_INCREMENT, HIGH);
   digitalWrite(VOLUMEN_UP_DOWN, HIGH);
+  if (rheostatePulseWidth > 0) {
+    delay(rheostatePulseWidth);
+  }
   digitalWrite(VOLUMEN_INCREMENT, LOW);
 }
 
 void sendDownToRheostate() {
   digitalWrite(VOLUMEN_INCREMENT, HIGH);
   digitalWrite(VOLUMEN_UP_DOWN, LOW);
+    if (rheostatePulseWidth > 0) {
+    delay(rheostatePulseWidth);
+  }
   digitalWrite(VOLUMEN_INCREMENT, LOW);
 }
 
@@ -234,16 +245,29 @@ void sendStatusToRheostate() {
   int volumeToSend = volume;
   if (mute) {
     volumeToSend = 0;
-  }
-  if (lastRheostateVolume > volumeToSend) {
-    int steps = lastRheostateVolume - volumeToSend;
-    for (int i = 0; i < steps; i++) {
+    for (int i = 0; i < volume_max; i++) {
+      if (i > 0 && rheostateDelayBetweenPulses > 0) {
+       delay(rheostateDelayBetweenPulses);
+      }
       sendDownToRheostate();
     }
-  } else if (lastRheostateVolume < volumeToSend) {
-    int steps = volumeToSend - lastRheostateVolume;
-    for (int i = 0; i < steps; i++) {
-      sendUpToRheostate();
+  } else {
+    if (lastRheostateVolume > volumeToSend) {
+      int steps = lastRheostateVolume - volumeToSend;
+      for (int i = 0; i < steps; i++) {
+        if (i > 0 && rheostateDelayBetweenPulses > 0) {
+         delay(rheostateDelayBetweenPulses);
+        }        
+        sendDownToRheostate(); 
+      }
+    } else if (lastRheostateVolume < volumeToSend) {
+      int steps = volumeToSend - lastRheostateVolume;
+      for (int i = 0; i < steps; i++) {
+      if (i > 0 && rheostateDelayBetweenPulses > 0) {
+       delay(rheostateDelayBetweenPulses);
+      }
+        sendUpToRheostate();
+      }
     }
   }
   lastRheostateVolume = volumeToSend;
