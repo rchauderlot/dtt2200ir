@@ -1,7 +1,15 @@
+#define LCD_TM1637
+//#define LCD_74HC595
+
 #include <IRremote.h>
-#include <lcd.h>
 #include <button.h>
 #include <EEPROM.h>
+#ifdef LCD_74HC595
+#include <lcd.h>
+#endif
+#ifdef LCD_TM1637
+#include <TM1637.h>
+#endif
 
 //#define __DEBUG__
 
@@ -10,8 +18,8 @@
 int VOLUMEN_UP_DOWN     = 2;   
 int VOLUMEN_INCREMENT   = 3;   
 int VOLUMEN_CHIP_SELECT = 4; 
-int VOL_UP_BUTTON       = 5;
-int VOL_DOWN_BUTTON     = 6;
+int VOL_UP_BUTTON       = -1; // 5;
+int VOL_DOWN_BUTTON     = -1; // 6;
 int MUTE_BUTTON         = 7;
 // TO RELAY BOARD OR MAIN BOARD
 int POWER_SWITCH_PIN    = -1;
@@ -63,7 +71,13 @@ unsigned long rheostateDelayBetweenPulses = 1;
 
 // Devices
 IRrecv irrecv(IR_RECV_PIN);
+#ifdef LCD_74HC595
 Lcd lcd(LCD_UPDATE_PIN,LCD_CLOCK_PIN,LCD_SERIAL_PIN);
+#endif
+#ifdef LCD_TM1637
+TM1637 lcd(LCD_CLOCK_PIN, LCD_SERIAL_PIN);
+#endif
+
 Button volUpButton(VOL_UP_BUTTON, volUpButtonPressed, DEBOUNCE_DELAY);
 Button volDownButton(VOL_DOWN_BUTTON, volDownButtonPressed, DEBOUNCE_DELAY);
 Button muteButton(MUTE_BUTTON, muteButtonPressed, DEBOUNCE_DELAY);
@@ -82,7 +96,7 @@ void setup()
   initRheostate();
   initLED();
   irrecv.enableIRIn(); // Start the receiver
-  sendStatusToLCD();
+  initLCD();
 }
 
 
@@ -134,22 +148,63 @@ void statusChanged() {
 /**
  * LCD functions
  */
+ 
+void initLCD() {
+
+#ifdef LCD_TM1637
+  lcd.init();
+  lcd.set(BRIGHT_TYPICAL);//BRIGHT_TYPICAL = 2,BRIGHT_DARKEST = 0,BRIGHTEST = 7;
+#endif
+  sendStatusToLCD();
+  timerStart();
+}
+ 
 void sendStatusToLCD() {
   if (mute) {
 #ifdef __DEBUG__
     Serial.println("mute");
 #endif
-    lcd.sendCharString(muteMessage, true);
+#ifdef LCD_74HC595
+  lcd.sendCharString(muteMessage, true);
+#endif
+#ifdef LCD_TM1637
+ lcd.display(0,0x10);
+ lcd.display(1,0x00); 
+ lcd.display(2,0x0F);
+ lcd.display(3,0x0F);
+#endif
+
+
   } else {
 #ifdef __DEBUG__
     Serial.println(volume);
 #endif
-    lcd.sendDigit(volume, digit_num, true);
+
+#ifdef LCD_74HC595
+  lcd.sendDigit(volume, digit_num, true);
+#endif
+#ifdef LCD_TM1637
+  int vol=volume;
+  for (int i=0; i< 4; i++) {
+    if (vol==0 && i > 0) {
+      lcd.display(3-i, 0x10);
+    } else {
+      lcd.display(3-i,vol % 10);
+      vol=vol/10;
+    }
+ }
+#endif
+
   }
 }
 
 void clearLCD () {
+#ifdef LCD_74HC595
   lcd.sendCharString(clearMessage);
+#endif
+#ifdef LCD_TM1637
+  lcd.clearDisplay();
+#endif
 }
 
 
@@ -283,12 +338,19 @@ void initLED () {
 }
 
 void lightLED () {
+  
   digitalWrite(TEST_PIN, HIGH);
+//#ifdef LCD_TM1637
+//  lcd.point(POINT_ON);
+//#endif
   ledTimerMillis = millis() + ledDuration;
 }
 
 void turnOffLED () {
   digitalWrite(TEST_PIN, LOW);
+//#ifdef LCD_TM1637
+//  lcd.point(POINT_OFF);
+//#endif
 }
 
 void updateLED () {
