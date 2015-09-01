@@ -1,7 +1,7 @@
 #define LCD_TM1637
 //#define LCD_74HC595
+#define IR_RECEIVER
 
-#include <IRremote.h>
 #include <button.h>
 #include <EEPROM.h>
 #ifdef LCD_74HC595
@@ -10,23 +10,29 @@
 #ifdef LCD_TM1637
 #include <TM1637.h>
 #endif
+#ifdef IR_RECEIVER
+#include <IRremote.h>
+#endif
 
-//#define __DEBUG__
+#define __DEBUG__
+
+
+#define SERIAL_BAUDRATE 9600
 
 // PINTOUT ASSIGNMENT
 // TO MAIN BOARD
-int VOLUMEN_UP_DOWN     = 2;   
+int VOLUMEN_UP_DOWN     = 6;   
 int VOLUMEN_INCREMENT   = 3;   
-int VOLUMEN_CHIP_SELECT = 4; 
-int VOL_UP_BUTTON       = -1; // 5;
-int VOL_DOWN_BUTTON     = -1; // 6;
-int MUTE_BUTTON         = 7;
+int VOLUMEN_CHIP_SELECT = -1; 
+int VOL_UP_BUTTON       = 8;
+int VOL_DOWN_BUTTON     = -1;
+int MUTE_BUTTON         = -1;
 // TO RELAY BOARD OR MAIN BOARD
 int POWER_SWITCH_PIN    = -1;
 // TO SENSOR OR MAIN BOARD
-int IR_RECV_PIN         = 8;
+int IR_RECV_PIN         = 7;
 // LCD BORAD
-int LCD_UPDATE_PIN      = 10;
+int LCD_UPDATE_PIN      = -1;
 int LCD_CLOCK_PIN       = 11;
 int LCD_SERIAL_PIN      = 12;
 // INTERNAL PIN
@@ -42,11 +48,11 @@ unsigned long messageDuration = 3000;
 unsigned long ledDuration = 100;
 
 // IR Code Table
-unsigned long VOL_UP_CODE   = 0x68733A46;
-unsigned long VOL_DOWN_CODE = 0x83B19366;
-unsigned long MUTE_CODE     = 0x2340B922;
-unsigned long POWER_CODE    = 0xF4BA2988;
-unsigned long IR_CODES[]    = {VOL_UP_CODE, VOL_DOWN_CODE, MUTE_CODE, 0};
+unsigned long VOL_UP_CODE   = 0xB1641F6E; //0x68733A46;
+unsigned long VOL_DOWN_CODE = 0xCCA2788E; //0x83B19366;
+unsigned long MUTE_CODE     = 0x6C319E4A; //0x2340B922;
+unsigned long POWER_CODE    = 0x3DAB0EB0; //0xF4BA2988;
+//unsigned long IR_CODES[]    = {VOL_UP_CODE, VOL_DOWN_CODE, MUTE_CODE, 0};
 
 
 int     volume_min = 1;
@@ -57,20 +63,24 @@ long    muteMemAddress   = 11;
 // Internal status
 int     volume = 0;
 boolean mute   = true;
+#ifdef IR_RECEIVER
 decode_results results;
 decode_results last_results;
+#endif
 unsigned long timerMillis;
 unsigned long ledTimerMillis;
 int     lastMemVolume = 0;
 boolean lastMemMute   = 0;
 int     lastRheostateVolume = 0;
 int     rheostateChipSelect = LOW;
-unsigned long rheostatePulseWidth = 1;
-unsigned long rheostateDelayBetweenPulses = 1;
+unsigned long rheostatePulseWidth = 2;
+unsigned long rheostateDelayBetweenPulses = 2;
 
 
 // Devices
+#ifdef IR_RECEIVER
 IRrecv irrecv(IR_RECV_PIN);
+#endif
 #ifdef LCD_74HC595
 Lcd lcd(LCD_UPDATE_PIN,LCD_CLOCK_PIN,LCD_SERIAL_PIN);
 #endif
@@ -89,13 +99,15 @@ void setup()
 //  }
 
 #ifdef __DEBUG__  
-  Serial.begin(9600);
+  Serial.begin(SERIAL_BAUDRATE);
   Serial.println("DTT2200IR");
 #endif
   restoreStatus();
   initRheostate();
   initLED();
+#ifdef IR_RECEIVER
   irrecv.enableIRIn(); // Start the receiver
+#endif
   initLCD();
 }
 
@@ -279,6 +291,10 @@ void initRheostate() {
 }
 
 void sendUpToRheostate() {
+#ifdef __DEBUG__  
+  Serial.println("----Send up to rheostate");
+#endif
+
   digitalWrite(VOLUMEN_INCREMENT, HIGH);
   digitalWrite(VOLUMEN_UP_DOWN, HIGH);
   if (rheostatePulseWidth > 0) {
@@ -288,6 +304,9 @@ void sendUpToRheostate() {
 }
 
 void sendDownToRheostate() {
+#ifdef __DEBUG__  
+  Serial.println("----Send down to rheostate");
+#endif
   digitalWrite(VOLUMEN_INCREMENT, HIGH);
   digitalWrite(VOLUMEN_UP_DOWN, LOW);
     if (rheostatePulseWidth > 0) {
@@ -297,6 +316,9 @@ void sendDownToRheostate() {
 }
 
 void sendStatusToRheostate() {
+#ifdef __DEBUG__  
+  Serial.println("--Start send to rheostate");
+#endif
   int volumeToSend = volume;
   if (mute) {
     volumeToSend = 0;
@@ -326,6 +348,10 @@ void sendStatusToRheostate() {
     }
   }
   lastRheostateVolume = volumeToSend;
+#ifdef __DEBUG__  
+  Serial.println("--End send to rheostate");
+#endif
+
 }
 
 /**
@@ -406,6 +432,7 @@ void loop() {
   volUpButton.update();
   volDownButton.update();
   muteButton.update();
+#ifdef IR_RECEIVER
   if (irrecv.decode(&results)) {
     if (last_results.decode_type == results.decode_type && last_results.value == results.value) {
 
@@ -427,5 +454,6 @@ void loop() {
     last_results = results;
     irrecv.resume(); // Receive the next value
   }
+#endif
 }
 
